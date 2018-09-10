@@ -80,3 +80,29 @@ def cvPerYear(X, y, fromYear, toYear, numTrainYears=0, evalOnlyLast=False):
             idxs_test = X[X.harvest_year >= val_year].index.values.astype(int)
         
         yield (idxs_train, idxs_test)
+
+def _test_startswith(name, lst_prefix):
+    for p in lst_prefix:
+        if name.startswith(p):
+            return True
+    return False
+
+import torch
+
+def save_model_ignoring(model, name, ignore=[]):
+    d = model.model.state_dict()
+    for k in list(d.keys()):
+        if _test_startswith(k, ignore):
+            del d[k]
+    torch.save(d, model.get_model_path(name))
+
+def load_model_ignoring(model, name, ignore=[]):
+    sd = torch.load(model.get_model_path(name), map_location=lambda storage, loc: storage)
+    names = set(model.model.state_dict().keys())
+    for n in list(sd.keys()): # list "detatches" the iterator
+        if _test_startswith(n, ignore):
+            del sd[n]
+        elif n not in names and n+'_raw' in names:
+            if n+'_raw' not in sd: sd[n+'_raw'] = sd[n]
+            del sd[n]
+    model.model.load_state_dict(sd, strict=False)
