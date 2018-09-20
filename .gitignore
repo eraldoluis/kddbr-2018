@@ -104,3 +104,4 @@ venv.bak/
 .mypy_cache/
 submissions/
 input/models
+input/all_clean.csv
