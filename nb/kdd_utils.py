@@ -1,52 +1,34 @@
+import os
+
 import pandas as pd
-import numpy as np
-import os 
 
 path = '../input/'
 
 def addFieldDataFtrs(df, shiftFtrs=['temperature', 'dewpoint', 'windspeed', 'Precipitation', 'Soilwater_L1'],
-                    shiftPeriod=2):
+                    shiftPeriod=2, rolling_wins=[3]):
     # Read field data.
-    df_field = pd.read_csv(os.path.join(path, 'field-0.csv'))
-    df_field['field'] = 0
-    for i in range(1, 28):
-        _df_field = pd.read_csv(path+'field-{}.csv'.format(i))
-        _df_field['field'] = i
-        df_field = pd.concat([df_field, _df_field])
+    df_fields = []
+    for field in range(28):
+        _df_field = pd.read_csv(os.path.join(path, 'field-{}.csv'.format(field)))
+        _df_field.insert(0, 'field', field)
 
-    # Remove duplicates.
-    df_field = df_field.drop_duplicates()
+        # Generate shift and rolling features.
+        for ftr in shiftFtrs:
+            for shift in range(1, shiftPeriod):
+                _df_field['{}_shift{}'.format(ftr, shift)] = _df_field[ftr].shift(shift)
 
-    # Group by month, year and field.
-    df_field = df_field.groupby(['month', 'year', 'field']).mean().reset_index()
+            for win in rolling_wins:
+                _df_field['{}_rolling_mean{}'.format(ftr, win)] = _df_field[ftr].rolling(win, min_periods=1).mean()
+                _df_field['{}_rolling_min{}'.format(ftr, win)] = _df_field[ftr].rolling(win, min_periods=1).min()
+                _df_field['{}_rolling_max{}'.format(ftr, win)] = _df_field[ftr].rolling(win, min_periods=1).max()
+
+        df_fields.append(_df_field)
+
+    df_field = pd.concat(df_fields)
 
     # Merge with given data.
-    df = pd.merge(df, df_field, left_on=['harvest_year', 'harvest_month','field'], 
-                  right_on=['year', 'month', 'field'], how='inner').reset_index()
-
-    # Remove redundant features.
-    # df_all = df_all.drop(columns=['Soilwater_L2', 'Soilwater_L3', 'Soilwater_L4'])
-
-    if shiftFtrs is not None:
-        df_group = df.groupby(['field', 'harvest_year', 'harvest_month']).mean().reset_index()
-        df_group = df_group[['field', 'harvest_year', 'harvest_month', 'production'] + shiftFtrs]
-        df_group = df_group.sort_values(['field', 'harvest_year', 'harvest_month'])
-
-        # Collect shift values of variables in all feature time.
-        new_features = {}
-        for f in shiftFtrs:
-            new_features[f] = []
-            for i in range(1, shiftPeriod):
-                new_feature = '{}_{}'.format(f, i)
-                new_features[f].append(new_feature)
-                df_group[new_feature] = df_group[f].shift(i).fillna(df_group[f].mean())
-
-        df_group = df_group.drop(shiftFtrs + ['production'], axis=1)
-
-        df = df.drop(['index', 'month', 'year'], axis=1)
-        df = pd.merge(df, df_group, left_on=['field', 'harvest_year', 'harvest_month'], 
-                      right_on=['field', 'harvest_year', 'harvest_month'], how='inner')
-        df = df.reset_index()
+    df = pd.merge(df, df_field, left_on=['field', 'harvest_year', 'harvest_month'],
+                  right_on=['field', 'year', 'month'], how='inner').reset_index()
 
     # Return merged data.
     return df

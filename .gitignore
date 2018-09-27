@@ -105,3 +105,4 @@ venv.bak/
 submissions/
 input/models
 input/all_clean.csv
+.idea
